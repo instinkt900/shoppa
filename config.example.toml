@@ -1,0 +1,18 @@
+# Shoppa configuration. Copy to config.toml and edit.
+# Unknown keys/sections fail loudly at startup, so a typo won't be silently ignored.
+
+[database]
+# Path to the SQLite file. In Docker this is under the /data volume.
+path = "shoppa.db"
+
+[web]
+host = "0.0.0.0"
+port = 8080
+# IANA timezone used for display. Nothing in Shoppa is scheduled, so this only
+# decides how "added 2 days ago" and the dates in the JSON API read.
+timezone = "UTC"
+# How many previous entries to show under the add form. The list is the shopping
+# history acting as a catalogue to tap from, so it is ordered most-recently-used
+# first and cut off — everything older is still in the database (and still in
+# `GET /api/items`), just not on the phone screen.
+previous_limit = 40

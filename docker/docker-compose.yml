@@ -1,0 +1,27 @@
+# Explicit project name so compose doesn't derive one from the parent directory.
+name: shoppa
+
+services:
+  shoppa:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: shoppa
+    image: shoppa
+    restart: always
+    # Container always listens on 8080; host port is configurable via docker/.env.
+    # The default steps clear of its siblings on the same host (Sugar Daddy 8080,
+    # Naggy 8090).
+    ports:
+      - "${SHOPPA_PORT:-8091}:8080"
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+      - shoppa-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  shoppa-data:

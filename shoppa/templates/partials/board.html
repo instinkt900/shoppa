@@ -1,0 +1,58 @@
+{# The whole board — both lists — is one swap target, re-rendered by every
+   mutation. data-pending drives the home-screen icon badge (see syncBadge in
+   phone.js). Each tile carries its own fields as data-* attributes: a long press
+   reads them straight into the editor, so opening it costs no round trip and
+   can't show anything the board doesn't. #}
+<div id="board" class="board" data-pending="{{ board.pending|length }}">
+  <section class="pending">
+    <h2>Shopping list {% if board.pending %}<span class="count">{{ board.pending|length }}</span>{% endif %}</h2>
+    {% if board.pending %}
+      <ul class="cards">
+        {% for i in board.pending %}
+          <li class="card is-pending" data-id="{{ i.id }}" data-name="{{ i.name }}" data-note="{{ i.note }}">
+            {# One tap ticks it off. No confirmation: it lands in Previous
+               entries, where one tap puts it back. #}
+            <button class="card-tap"
+                    hx-post="/api/items/{{ i.id }}/done"
+                    hx-target="#board" hx-swap="outerHTML">
+              <span class="card-title">{{ i.name }}</span>
+              {% if i.note %}<span class="card-note">{{ i.note }}</span>{% endif %}
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">Nothing on the list. 🛒</p>
+    {% endif %}
+  </section>
+
+  <section class="previous">
+    <h2>
+      Previous entries
+      {% if board.previous %}
+        <button type="button" class="link-btn"
+                hx-post="/api/previous/clear"
+                hx-target="#board" hx-swap="outerHTML"
+                hx-confirm="Forget every previous entry? Anything on the list now is kept.">clear</button>
+      {% endif %}
+    </h2>
+    {% if board.previous %}
+      <ul class="cards">
+        {% for i in board.previous %}
+          <li class="card" data-id="{{ i.id }}" data-name="{{ i.name }}" data-note="{{ i.note }}">
+            {# The mirror of the tile above: tap to put it back on the list. #}
+            <button class="card-tap"
+                    hx-post="/api/items/{{ i.id }}/repeat"
+                    hx-target="#board" hx-swap="outerHTML">
+              <span class="card-title">{{ i.name }}</span>
+              {% if i.note %}<span class="card-note">{{ i.note }}</span>{% endif %}
+              <span class="card-ago">{% if i.times_added > 1 %}{{ i.times_added }}× · {% endif %}{{ i.ago }}</span>
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">Things you tick off end up here, ready to tap back on.</p>
+    {% endif %}
+  </section>
+</div>

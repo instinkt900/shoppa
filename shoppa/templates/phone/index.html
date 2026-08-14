@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block body_class %}phone{% endblock %}
+
+{% block content %}
+<header class="app-header">
+  <h1>Shoppa</h1>
+  <p class="tagline">Tap to tick off. Tap again to put it back.</p>
+</header>
+
+<main>
+  {% include "partials/board.html" %}
+
+  {# The form sits *between* the two lists but outside the swapped fragment —
+     see style.css: #board is `display: contents` and CSS `order` interleaves
+     them. Putting it inside the partial would throw away half-typed input on
+     every tap. #}
+  <section class="add">
+    <h2>Add an item</h2>
+    <form id="add-form"
+          hx-post="/api/items"
+          hx-target="#board" hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful) { this.reset(); this.elements.name.focus(); }">
+      <div class="add-row">
+        <input type="text" name="name" placeholder="Chicken" required autocomplete="off"
+               maxlength="80" aria-label="Item name">
+        <input type="text" name="note" placeholder="Breast. 600g" autocomplete="off"
+               maxlength="120" aria-label="Note">
+        <button type="submit" class="primary">Add</button>
+      </div>
+    </form>
+  </section>
+
+  <p class="hint">Long-press anything to edit or delete it.</p>
+</main>
+
+{# One dialog for the whole board rather than one per tile, and both live outside
+   #board so an HTMX swap can't yank them away mid-edit. A long press opens the
+   menu; "Edit" hands the same item on to the editor below. #}
+<dialog id="menu-modal" class="modal">
+  <h2 id="menu-title">Item</h2>
+  <div class="modal-actions column">
+    <button type="button" class="ghost" data-action="edit">Edit</button>
+    <button type="button" class="ghost danger" data-action="delete">Delete permanently</button>
+    <button type="button" class="ghost" data-close-modal>Cancel</button>
+  </div>
+</dialog>
+
+{# The PATCH is issued from phone.js: hx-patch would bake the URL in at load
+   time, and the item id isn't known until a tile is pressed. #}
+<dialog id="edit-modal" class="modal">
+  <h2>Edit item</h2>
+  <form id="edit-form">
+    <label class="field">
+      <span>Name</span>
+      <input type="text" name="name" required autocomplete="off" maxlength="80">
+    </label>
+
+    <label class="field">
+      <span>Note (optional)</span>
+      <input type="text" name="note" autocomplete="off" maxlength="120">
+    </label>
+
+    <p class="modal-error" id="edit-error"></p>
+
+    <div class="modal-actions">
+      <button type="button" class="ghost" data-close-modal>Cancel</button>
+      <button type="submit" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/phone.js?v={{ v }}" defer></script>
+{% endblock %}

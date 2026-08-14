@@ -1,0 +1,259 @@
+:root {
+  --bg: #12141a;
+  --surface: #1b1e27;
+  --surface-2: #232733;
+  --border: #2c313d;
+  --text: #e8ebf2;
+  --muted: #99a0b0;
+  /* Green is Shoppa's own hue — sibling to Sugar Daddy's blue and Naggy's amber,
+     so the three are tellable apart at a glance on a home screen. */
+  --accent: #57d9a3;
+  --accent-ink: #05231a;
+  --pending-bg: rgba(87, 217, 163, 0.10);
+  --pending-border: rgba(87, 217, 163, 0.32);
+  --danger: #ff6b6b;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+html { color-scheme: dark; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.phone { max-width: 560px; margin: 0 auto; }
+
+.app-header { padding: 20px 18px 8px; }
+.app-header h1 { margin: 0; font-size: 1.7rem; letter-spacing: -0.02em; }
+.app-header .tagline { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+
+/* The add form sits *between* the two lists, but the whole board — both lists —
+   is one HTMX swap target, so the form can't live inside it in the markup: every
+   tap would re-render it and throw away whatever was half-typed. Instead
+   `display: contents` dissolves the board wrapper so its two sections become
+   flex items of `main` alongside the form, and `order` interleaves them. Every
+   direct child needs an explicit order, since the default of 0 sorts before any
+   of these. */
+main { padding: 8px 14px 40px; display: flex; flex-direction: column; }
+#board { display: contents; }
+.pending  { order: 1; }
+.add      { order: 2; }
+.previous { order: 3; }
+.hint     { order: 4; }
+
+section { margin-top: 22px; }
+section h2 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.count {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+/* "clear" next to the Previous entries heading — deliberately the quietest
+   control on the screen. */
+.link-btn {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.link-btn:active { color: var(--danger); }
+
+.cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.card {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  /* Tiles answer to a long press (edit/delete); without this Android hijacks the
+     same gesture for text selection and its callout menu. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.card.is-pending {
+  background: var(--pending-bg);
+  border-color: var(--pending-border);
+}
+
+/* One line per entry: name, then note, then age. Compact on purpose — the list
+   is read at arm's length in a supermarket aisle, so every tile should be
+   scannable without unpacking a second line. */
+.card-tap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 13px 15px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.card-tap:active { background: rgba(255, 255, 255, 0.05); }
+
+.card-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 1.02rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The note gives up its space first — it's the detail, the name is the item.
+   Hence the shrink factor of 4 against the title's 1: with both at 1 a long name
+   and a long note truncate about equally, which loses the word that identifies
+   the thing. */
+.card-note {
+  flex: 1 4 auto;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-ago {
+  flex: 0 0 auto;
+  margin-left: auto;   /* pins it right even when there's no note to push it */
+  padding-left: 6px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+/* Previous entries are history, not the list — dimmer, so the eye lands on the
+   pending tiles first. Full strength while a finger is on one. */
+.previous .card { opacity: 0.85; }
+.previous .card:active { opacity: 1; }
+
+.empty {
+  margin: 4px;
+  padding: 18px 16px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.hint {
+  margin: 14px 6px 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* --- add form --- */
+/* Name across the top, then note and the button sharing the row below: three
+   controls abreast is too tight to hit on a phone. */
+.add-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.add-row input[name="name"] { grid-column: 1 / -1; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > span { font-size: 0.82rem; color: var(--muted); }
+
+input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 12px 14px;
+  font-size: 1rem;
+}
+input:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+button.primary:active { filter: brightness(0.92); }
+
+button.ghost {
+  width: 100%;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 13px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.ghost:active { background: var(--border); }
+button.ghost.danger { color: var(--danger); }
+
+/* --- dialogs (long-press menu and editor) --- */
+.modal {
+  width: min(92vw, 460px);
+  margin: auto;                      /* centres it in the viewport, top and bottom */
+  padding: 18px 16px 16px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.modal::backdrop { background: rgba(0, 0, 0, 0.6); }
+.modal h2 {
+  margin: 0 0 14px;
+  font-size: 1.05rem;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: -0.01em;
+  /* A long name shouldn't be able to stretch the menu wider than the screen. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modal form { display: flex; flex-direction: column; gap: 14px; }
+/* Inputs inside a dialog sit on --surface too, so lift them a shade to keep an edge. */
+.modal input[type="text"] { background: var(--surface-2); }
+
+.modal-actions { display: flex; gap: 10px; }
+.modal-actions button { flex: 1; }
+/* The long-press menu stacks its choices instead: they're actions, not a
+   cancel/confirm pair, and a full-width row each is easier to hit. */
+.modal-actions.column { flex-direction: column; }
+
+.modal-error { margin: 0; color: var(--danger); font-size: 0.82rem; }
+.modal-error:empty { display: none; }
