@@ -180,19 +180,21 @@ section h2 {
 /* Name across the top, then note and the button sharing the row below: three
    controls abreast is too tight to hit on a phone. */
 .add-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
-.add-row .suggest-wrap { grid-column: 1 / -1; }
+.add-row input[name="name"] { grid-column: 1 / -1; }
 
 /* --- name suggestions --- */
 /* The box hangs *over* the previous list rather than pushing it down: it appears
    and disappears on every keystroke, and a form whose note field and Add button
-   jump around under the thumb while you type is unusable. `relative` on the
-   wrapper is what the absolute list is measured from. */
-.suggest-wrap { position: relative; }
+   jump around under the thumb while you type is unusable. It's measured from the
+   whole form, not from the name field, so it opens *below* the note and the Add
+   button — covering history you can spare instead of the two controls you're
+   most likely to want next. */
+#add-form { position: relative; }
 
 .suggestions {
   position: absolute;
   z-index: 5;
-  top: calc(100% + 4px);
+  top: calc(100% + 8px);
   left: 0;
   right: 0;
   margin: 0;

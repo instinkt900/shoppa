@@ -220,11 +220,14 @@
       if (!input.value.trim()) closeSuggestions();
     });
 
-    // Anywhere else on the page dismisses it. Not `blur`: on Android the tap that
-    // picks a row blurs the input first, and the box would be gone before the
-    // click landed on it.
+    // Anywhere but the name field and the box itself dismisses it — including the
+    // note field and Add, which now sit above it. Not `blur`: on Android the tap
+    // that picks a row blurs the input first, and the box would be gone before
+    // the click landed on it.
     document.addEventListener("pointerdown", (e) => {
-      if (!e.target.closest || !e.target.closest(".suggest-wrap")) closeSuggestions();
+      if (e.target === input) return;
+      if (e.target.closest && e.target.closest("#suggestions")) return;
+      closeSuggestions();
     });
   }
 

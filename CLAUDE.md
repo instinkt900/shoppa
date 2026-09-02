@@ -123,12 +123,20 @@ config.example.toml   the only tracked config; real config.toml is gitignored
   `items.suggest` and not in JS. It's **server-side on purpose**: the board's
   previous list is cut to `previous_limit`, and the point of typing a name is to
   reach the entry that scrolled off months ago. `#suggestions` is absolutely
-  positioned inside `.suggest-wrap` so the box hangs *over* the previous list
-  rather than shoving the note field and Add button around mid-type. Picking a row
+  positioned against `#add-form` so the box hangs *below* the note field and Add
+  button and over the previous list — it must cover history you can spare, never
+  the two controls you may want next, and it must not shove them around mid-type
+  by taking up flow. Picking a row
   fills **both** fields (a suggestion is a whole entry; a stale note would build a
   third row out of two that already exist) and doesn't auto-submit — the quantity
-  usually wants a nudge first. Dismissal is `pointerdown` outside `.suggest-wrap`,
-  never `blur`: on Android the tap that picks a row blurs the input first.
+  usually wants a nudge first. Dismissal is `pointerdown` anywhere but the name
+  field and `#suggestions`, never `blur`: on Android the tap that picks a row
+  blurs the input first, and the box would go before the click landed.
+- **The add form's `hx-on::after-request` must test `event.target === this`.**
+  htmx events bubble, and the name field fires its own request on every keystroke,
+  so without the guard each one reaches the form's handler as a successful request
+  and `this.reset()` wipes the field mid-word. Any handler on a container that
+  holds another hx- element needs the same check.
 - `sw.js` is **network-first**, so code/template/static changes roll out on reload.
 
 ## Commands
