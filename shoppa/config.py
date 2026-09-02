@@ -38,6 +38,21 @@ class WebConfig:
     # How many previous entries the phone shows. Older ones stay in the database
     # and in `GET /api/items`; they're only cut from the screen.
     previous_limit: int = 40
+    # Drop previous entries not used in this many days. 0 = no age cut, which is
+    # the default so an existing install's history doesn't shrink on upgrade.
+    # This is the cut that actually means "old"; `previous_limit` is only a cap on
+    # how much of what's left can bury a screen.
+    previous_max_age_days: int = 0
+
+    @property
+    def previous_max_age(self) -> int | None:
+        """The age cut in seconds, or None for "no cut" — what `items.board` takes.
+
+        A property, not a field, so `_known()` still rejects it in the TOML: days
+        are what a person writes in a config file, seconds are what the rest of
+        the app counts in, and only one of the two is a setting.
+        """
+        return self.previous_max_age_days * 86_400 or None
 
 
 @dataclass
@@ -74,5 +89,7 @@ def load_config(path: str | Path) -> Config:
 
     if web.previous_limit < 0:
         raise ConfigError("[web] previous_limit must be >= 0")
+    if web.previous_max_age_days < 0:
+        raise ConfigError("[web] previous_max_age_days must be >= 0 (0 = no age cut)")
 
     return Config(database=database, web=web)

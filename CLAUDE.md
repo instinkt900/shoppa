@@ -35,9 +35,9 @@ shoppa/
   web.py         FastAPI app factory (create_app); all routes as closures; tz helpers
   db.py          SQLite schema + Database wrapper (short-lived connections)
   models.py      dataclass: Item
-  items.py       PURE logic: normalize, entry_key, board, humanize_ago
+  items.py       PURE logic: normalize, entry_key, board, suggest, humanize_ago
   config.py      TOML loader; dataclasses; _known() rejects unknown keys
-  templates/     base.html, phone/index.html, partials/board.html
+  templates/     base.html, phone/index.html, partials/{board,suggestions}.html
   static/        style.css, phone.js, sw.js, htmx.min.js (vendored), icons/
 docker/          Dockerfile, docker-compose.yml
 deploy/          install-server.sh
@@ -67,9 +67,21 @@ config.example.toml   the only tracked config; real config.toml is gitignored
   rows, that loses a note.
 - **Keep `items.py` pure** (no I/O, no wall clock, no config — `now` is passed in).
   New ordering/matching/phrasing logic goes there and gets covered in `tests/`.
-- Pending is ordered **newest first**, previous **most recently ticked off first**,
-  ties broken on `id` so the order is stable. `previous_limit` trims *only* the
-  history; the shopping list is never truncated.
+- **Both lists are ordered A–Z** on `items._alpha_key` — the normalised name, then
+  the normalised note, then `id` — so display order agrees with the dedupe key and
+  is total. Alphabetical because both lists are read by *hunting* for a name; a
+  recency order reshuffles under the thumb on every tap. The history's two cuts
+  are both about **time** and both run *before* the sort — `previous_max_age`
+  (seconds; drops entries whose `_last_used` is older, and `board` raises if it's
+  given without `now`, since items.py owns no clock) then `previous_limit` (caps
+  what survived to the N most recently used). Sorting decides where a row sits,
+  never whether it's shown; cutting the alphabet would amputate the history past
+  whatever letter the limit reached. Both only hide rows — nothing there deletes.
+  The shopping list is never trimmed by either.
+- `items.suggest(items, query, limit)` backs the add form's dropdown: previous
+  entries only (a pending one is already a visible tile), matched on the
+  normalised name, prefix hits ranked above substring hits, A–Z within each rank,
+  empty query → nothing.
 - Column additions stay guarded by `_has_column`; **row rewrites need a
   `PRAGMA user_version` bump** (`_USER_VERSION` in `db.py`) since they leave no
   trace to detect. `_migrate_data` is empty scaffolding at v1 — that's deliberate.
@@ -78,7 +90,8 @@ config.example.toml   the only tracked config; real config.toml is gitignored
 
 - Pages: `GET /`, `GET /healthz`, `GET /manifest.webmanifest`, `GET /sw.js`
 - Read APIs: `GET /api/items` (both lists, history **untrimmed**),
-  `GET /api/pending`
+  `GET /api/pending`, `GET /api/suggest?name=…` (add-form dropdown; returns
+  `partials/suggestions.html` to HTMX, JSON otherwise)
 - Write APIs: `POST /api/items`, `POST /api/items/{id}/done`,
   `POST /api/items/{id}/repeat`, `PATCH /api/items/{id}`, `DELETE /api/items/{id}`,
   `POST /api/previous/clear`
@@ -105,6 +118,17 @@ config.example.toml   the only tracked config; real config.toml is gitignored
   until a tile is pressed.
 - The long press sets `suppressClick`, and a **capture-phase** click handler eats
   the release — without it a long press would also tick the item off.
+- The name field's suggestion box is HTMX (`hx-get="/api/suggest"`,
+  `hx-params="name"`, `hx-target="#suggestions"`), so the filtering lives in
+  `items.suggest` and not in JS. It's **server-side on purpose**: the board's
+  previous list is cut to `previous_limit`, and the point of typing a name is to
+  reach the entry that scrolled off months ago. `#suggestions` is absolutely
+  positioned inside `.suggest-wrap` so the box hangs *over* the previous list
+  rather than shoving the note field and Add button around mid-type. Picking a row
+  fills **both** fields (a suggestion is a whole entry; a stale note would build a
+  third row out of two that already exist) and doesn't auto-submit — the quantity
+  usually wants a nudge first. Dismissal is `pointerdown` outside `.suggest-wrap`,
+  never `blur`: on Android the tap that picks a row blurs the input first.
 - `sw.js` is **network-first**, so code/template/static changes roll out on reload.
 
 ## Commands
@@ -119,7 +143,9 @@ shoppa add     -c config.toml NAME [NOTE]
 ## Configuration
 
 One TOML (`config.toml`; template `config.example.toml`). Sections `[database]`
-(path) and `[web]` (host/port/timezone/previous_limit). `config.py` uses
+(path) and `[web]` (host/port/timezone/previous_limit/previous_max_age_days —
+`WebConfig.previous_max_age` is a *property* converting the days to seconds or
+None, deliberately not a field so `_known()` still rejects it in the file). `config.py` uses
 dataclasses + `_known()` so an **unknown key/section fails loudly**. There are no
 secrets today; if one is ever needed it comes from the **environment only**, and
 since it wouldn't be a field of any section `_known()` rejects it automatically if
@@ -140,7 +166,7 @@ Deploy: `git pull --ff-only && cd docker && docker compose up -d --build`
 
 - **Categories / aisle order** — sorting the list the way the supermarket is laid
   out. Would be a guarded `ALTER TABLE` for a `category` column plus a sort key in
-  `items.board`.
+  `items.board` — category first, then the existing `_alpha_key` within each.
 - **Quantities** — the note field carries them informally today ("600g"). A real
   quantity column would want its own tile slot rather than more note text.
 - **Sharing between phones** — there's no auth or per-user data; today it's one

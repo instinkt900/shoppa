@@ -180,7 +180,51 @@ section h2 {
 /* Name across the top, then note and the button sharing the row below: three
    controls abreast is too tight to hit on a phone. */
 .add-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
-.add-row input[name="name"] { grid-column: 1 / -1; }
+.add-row .suggest-wrap { grid-column: 1 / -1; }
+
+/* --- name suggestions --- */
+/* The box hangs *over* the previous list rather than pushing it down: it appears
+   and disappears on every keystroke, and a form whose note field and Add button
+   jump around under the thumb while you type is unusable. `relative` on the
+   wrapper is what the absolute list is measured from. */
+.suggest-wrap { position: relative; }
+
+.suggestions {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* Enough shadow to read as floating above the list it covers. */
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  /* Six rows fit; a seventh would mean the box had swallowed the screen. */
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+/* Same shape as a tile — name, then note — because it is one: what you tap here
+   is the entry that will be revived, note and all. */
+.suggestion {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 10px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.suggestion:active { background: var(--surface); }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field > span { font-size: 0.82rem; color: var(--muted); }

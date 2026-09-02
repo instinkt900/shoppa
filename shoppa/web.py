@@ -38,6 +38,11 @@ _HERE = Path(__file__).parent
 MAX_NAME = 80
 MAX_NOTE = 120
 
+# How many suggestions the add form offers. The box hangs over the previous list
+# while the keyboard is up, so more than about this many would cover the screen
+# with the thing you were trying to avoid reading.
+SUGGEST_LIMIT = 6
+
 log = logging.getLogger(__name__)
 
 
@@ -99,7 +104,9 @@ def create_app(config_path: str) -> FastAPI:
         }
 
     def board_view(now: int) -> dict:
-        b = items_logic.board(db.list_items(), cfg.web.previous_limit)
+        b = items_logic.board(
+            db.list_items(), cfg.web.previous_limit, cfg.web.previous_max_age, now
+        )
         return {
             "pending": [item_json(i, now) for i in b["pending"]],
             "previous": [item_json(i, now) for i in b["previous"]],
@@ -176,6 +183,27 @@ def create_app(config_path: str) -> FastAPI:
         now = now_epoch()
         b = items_logic.board(db.list_items())
         return {"now": now, "pending": [item_json(i, now) for i in b["pending"]]}
+
+    @app.get("/api/suggest")
+    def api_suggest(request: Request, name: str = ""):
+        """Previous entries matching a half-typed name — the add form's dropdown.
+
+        Deliberately server-side rather than filtered out of the tiles already on
+        the page: the board's previous list is cut to `previous_limit`, and the
+        whole point of typing a name is to reach the entry that scrolled off the
+        bottom months ago. Ranking and matching are `items.suggest`'s, so the box
+        can't disagree with the dedupe key about what counts as the same thing.
+
+        The parameter is `name` so the input can send its own value untouched
+        (`hx-params="name"`) instead of htmx having to rewrite it.
+        """
+        matches = items_logic.suggest(db.list_items(), name, SUGGEST_LIMIT)
+        if wants_partial(request):
+            return templates.TemplateResponse(
+                request, "partials/suggestions.html", {"suggestions": matches}
+            )
+        now = now_epoch()
+        return {"now": now, "suggestions": [item_json(i, now) for i in matches]}
 
     # --- write APIs ----------------------------------------------------------
 

@@ -32,8 +32,10 @@ python -m shoppa serve   -c config.toml  # open http://localhost:8080/
 ```
 
 Type a name (and optionally a note) into the form between the two lists and hit
-**Add**. The item appears at the top of the shopping list; tap it when it's in the
-trolley and it drops into Previous entries. Next week, tap it there to put it back.
+**Add** — or start typing a name and tap one of the previous entries it suggests,
+which fills the note in too. The item files itself alphabetically into the
+shopping list; tap it when it's in the trolley and it drops into Previous entries.
+Next week, tap it there to put it back.
 
 ## Commands
 
@@ -48,9 +50,9 @@ shoppa add     -c config.toml NAME [NOTE]    # add without opening the app
 
 There is **one database row per entry**, and a `pending` flag decides which list
 it's in. Ticking something off never deletes it — that's the whole point: the
-previous-entries list is a catalogue of everything you've ever bought, ordered
-most-recently-used first, so your regulars stay within thumb reach of the form.
-Only the long-press **Delete** removes a row, and `clear` under the Previous
+previous-entries list is a catalogue of everything you've ever bought, and it's
+what the add form's suggestions search. Only the long-press **Delete** removes a
+row, and `clear` under the Previous
 entries heading empties the history while leaving the current list alone.
 
 An entry is identified by its **name *and* its note**, both normalised (case,
@@ -62,10 +64,42 @@ spacing and accents folded — see `shoppa/items.py`). So:
 - "Chicken / Breast. 600g" and "Chicken / Thighs. 1kg" are **two entries**, because
   they're two things you might want on the list at once.
 
-Ordering is deliberate and lives in `shoppa/items.py` (pure, unit-tested): the
-shopping list is **newest first**, so what you just typed lands where you're
-already looking; the history is **most recently ticked off first**, and trimmed to
-`[web] previous_limit` on the phone (the JSON API always returns all of it).
+Ordering is deliberate and lives in `shoppa/items.py` (pure, unit-tested). **Both
+lists are A–Z**, on the normalised name and then the note, so the same fold that
+decides identity also decides where a tile sits. Both lists are read by hunting
+for a name — "is bread on here?" in the aisle — and only a fixed order lets you
+find one without reading every tile; a recency order reshuffles itself under your
+thumb on every tap.
+
+The history is **cut by time** before it's sorted, never by letter — trimming the
+alphabet would silently amputate it at whatever letter the limit reached. Two
+settings do the cutting, and both only hide rows:
+
+- `[web] previous_max_age_days` drops entries you haven't bought in that long.
+  This is the one that means "old": a thing last bought two years ago isn't a
+  catalogue entry any more, however few entries sit above it. `0` (the default)
+  turns it off.
+- `[web] previous_limit` then caps what's left to the N most recently used, so a
+  screen can't be buried whatever the age cutoff is.
+
+Nothing is deleted by either. `GET /api/items`, `shoppa list --all` and the add
+form's name suggestions all still see the whole history — only the long-press
+**Delete** and `clear` remove rows.
+
+## Name suggestions
+
+Typing into the name field searches the history and drops matching **whole
+entries** under it — name *and* note, because the note is the half you don't
+remember and the half that decides whether the entry you already have gets revived
+or a near-duplicate gets created. Tap one to fill both fields, then edit the
+quantity before you hit Add.
+
+Matching ignores case, spacing and accents, exactly like the dedupe key does.
+Names that *start* with what you typed rank above names that merely contain it, so
+"ap" offers Apples before Pineapple. Things already on the shopping list aren't
+offered — they're a tile you can already see. The search runs server-side against
+the **whole** history (`GET /api/suggest?name=…`), not just the previous entries
+that fit on the screen.
 
 Timestamps are UTC epoch seconds everywhere internally; timezone conversion
 happens only in the web layer. Nothing here is scheduled, so `[web] timezone` only
@@ -74,7 +108,7 @@ decides how the ages and dates read.
 ## Web routes
 
 - Pages: `GET /`, `GET /healthz`, `GET /manifest.webmanifest`, `GET /sw.js`
-- Read APIs: `GET /api/items`, `GET /api/pending`
+- Read APIs: `GET /api/items`, `GET /api/pending`, `GET /api/suggest?name=…`
 - Write APIs: `POST /api/items`, `POST /api/items/{id}/done`,
   `POST /api/items/{id}/repeat`, `PATCH /api/items/{id}`, `DELETE /api/items/{id}`,
   `POST /api/previous/clear`

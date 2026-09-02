@@ -19,10 +19,24 @@
     <form id="add-form"
           hx-post="/api/items"
           hx-target="#board" hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful) { this.reset(); this.elements.name.focus(); }">
+          hx-on::after-request="if(event.detail.successful) { this.reset(); closeSuggestions(); this.elements.name.focus(); }">
       <div class="add-row">
-        <input type="text" name="name" placeholder="Chicken" required autocomplete="off"
-               maxlength="80" aria-label="Item name">
+        {# The name field doubles as a search of the history: it GETs its own
+           value back as a list of matching previous entries. `hx-params="name"`
+           keeps it to that one value — htmx would otherwise post the whole
+           enclosing form. The box is anchored to this wrapper, not the row, so
+           it hangs under the field rather than shoving the note and the button
+           down the page. #}
+        <div class="suggest-wrap">
+          <input type="text" name="name" placeholder="Chicken" required autocomplete="off"
+                 maxlength="80" aria-label="Item name"
+                 role="combobox" aria-expanded="false" aria-autocomplete="list"
+                 aria-controls="suggestions"
+                 hx-get="/api/suggest" hx-params="name"
+                 hx-trigger="input changed delay:150ms"
+                 hx-target="#suggestions" hx-swap="innerHTML">
+          <div id="suggestions"></div>
+        </div>
         <input type="text" name="note" placeholder="Breast. 600g" autocomplete="off"
                maxlength="120" aria-label="Note">
         <button type="submit" class="primary">Add</button>

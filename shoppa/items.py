@@ -2,9 +2,9 @@
 
 Everything Shoppa decides for itself lives here so it can be unit-tested with a
 bare interpreter: how two entries are judged to be the same thing, how the two
-lists are ordered, and how an age reads. `db.py` calls `entry_key` when it writes
-and `web.py` calls `board`/`humanize_ago` when it renders; neither reimplements
-any of it.
+lists are ordered, which previous entries a half-typed name suggests, and how an
+age reads. `db.py` calls `entry_key` when it writes and `web.py` calls
+`board`/`suggest`/`humanize_ago` when it renders; neither reimplements any of it.
 """
 
 from __future__ import annotations
@@ -44,35 +44,114 @@ def entry_key(name: str, note: str) -> tuple[str, str]:
     return normalize(name), normalize(note)
 
 
-def board(items: list[Item], previous_limit: int | None = None) -> dict:
-    """Split the rows into the two lists the phone shows, each in its own order.
+def board(
+    items: list[Item],
+    previous_limit: int | None = None,
+    max_age: int | None = None,
+    now: int | None = None,
+) -> dict:
+    """Split the rows into the two lists the phone shows, both sorted A-Z.
 
-    Pending is **newest first**: what you just typed lands at the top of the
-    screen, where you're already looking, and the list reads as a stack of what's
-    left. Previous is **most recently ticked off first**, so the things you buy
-    often stay within thumb reach of the form and the one-offs sink — that list is
-    a catalogue to tap from, not a log to read.
+    Alphabetical, not chronological: both lists are read by *hunting* — "is bread
+    on here?" in the aisle, "where's the flour?" when tapping the week's shop back
+    on — and only a stable order lets you find a name without reading every tile.
+    A recency order re-shuffles itself under your thumb on every tap, which is the
+    one thing a list you're scanning must not do.
 
-    `previous_limit` trims only the previous list (None = no limit); pending is
-    never truncated, since a shopping list you can't see all of is worse than a
-    long one.
+    The sort key is the *normalised* name then note, so case and accents don't
+    scatter related tiles ("Crème fraîche" files under c, next to "Chicken"), and
+    the two "Chicken" entries sit together ordered by their notes. `id` breaks the
+    last tie so the order is total and never depends on the row order SQL happens
+    to return.
+
+    Two cuts trim the history before any of that, and **both are about time, not
+    about names** — sorting decides where an entry sits, never whether it's shown.
+    Trimming the alphabet instead would silently amputate the history past
+    whatever letter the limit reached.
+
+    - `max_age` (seconds; needs `now`) drops entries not used in that long. This
+      is the honest one: a thing you last bought two years ago isn't a catalogue
+      entry any more, however few entries happen to sit above it.
+    - `previous_limit` then caps what's left to the N most recently used, so a
+      screen can't be buried whatever the age cutoff is set to.
+
+    Either can be None for "no cut". Both only hide rows — nothing here deletes
+    anything, and `GET /api/items` still returns the lot.
+
+    Pending is never trimmed by either: a shopping list you can't see all of is
+    worse than a long one, and an item you put on the list *is* current by
+    definition however long it has sat there.
     """
-    pending = sorted(
-        (i for i in items if i.pending),
-        key=lambda i: (i.added_at, i.id or 0),
-        reverse=True,
-    )
+    if max_age is not None and now is None:
+        # Better a loud error than silently keeping everything: this module owns
+        # no clock on purpose, so an age cut it can't measure is a caller's bug.
+        raise ValueError("board(max_age=...) needs `now` — items.py has no clock")
+
+    pending = sorted((i for i in items if i.pending), key=_alpha_key)
     previous = sorted(
         (i for i in items if not i.pending),
-        # `done_at` is set whenever a row leaves the pending list, so it's only
-        # None for rows that got there some other way (a direct API PATCH, say).
-        # Fall back to created_at rather than dropping them off the end.
-        key=lambda i: (i.done_at or i.created_at, i.id or 0),
+        # `done_at` is when a row left the pending list, i.e. when it was last
+        # actually used — which is what both cuts and the recency sort mean by
+        # "old". It's only None for rows that got here some other way (a direct
+        # API PATCH, say); fall back to created_at rather than dropping them.
+        # `id` breaks a tie so the count trim keeps the same rows every time.
+        key=lambda i: (_last_used(i), i.id or 0),
         reverse=True,
     )
+    if max_age is not None:
+        previous = [i for i in previous if now - _last_used(i) <= max_age]
     if previous_limit is not None:
         previous = previous[:previous_limit]
-    return {"pending": pending, "previous": previous}
+    return {"pending": pending, "previous": sorted(previous, key=_alpha_key)}
+
+
+def _last_used(item: Item) -> int:
+    """When an entry was last in the trolley — the stamp both history cuts read."""
+    return item.done_at or item.created_at
+
+
+def _alpha_key(item: Item) -> tuple[str, str, int]:
+    """Sort key for a tile: normalised name, then note, then id.
+
+    Normalised so display order agrees with the identity the rest of the app
+    uses — two tiles that would dedupe against each other can never sort apart.
+    """
+    return (*entry_key(item.name, item.note), item.id or 0)
+
+
+def suggest(items: list[Item], query: str, limit: int = 6) -> list[Item]:
+    """Previous entries whose name matches a half-typed one, best match first.
+
+    The point of the box under the name field is to type "chi" and be handed back
+    the *note* as well — "Chicken / Breast. 600g" — because the note is the half
+    you don't remember and the half that decides whether the entry you already
+    have gets revived or a near-duplicate gets created. So a hit is a whole row,
+    not a name.
+
+    Only previous entries are offered. Something already on the list isn't a thing
+    you usefully add, and suggesting it would drop the one tile you can already
+    see into the box you're typing into.
+
+    Matching is on the normalised name, so it ignores case, spacing and accents
+    exactly like the dedupe key does. Names that *start* with what's typed rank
+    above names that merely contain it — typing "ap" wants Apples before
+    Pineapple — and within each group it's the same A-Z order as the lists, so the
+    box doesn't reshuffle itself as you type another letter.
+    """
+    q = normalize(query)
+    if not q:
+        return []
+    hits = []
+    for i in items:
+        if i.pending:
+            continue
+        name = normalize(i.name)
+        if name.startswith(q):
+            hits.append((0, i))
+        elif q in name:
+            hits.append((1, i))
+    hits.sort(key=lambda pair: (pair[0], _alpha_key(pair[1])))
+    return [i for _, i in hits[:limit]]
 
 
 def humanize_ago(seconds: int) -> str:

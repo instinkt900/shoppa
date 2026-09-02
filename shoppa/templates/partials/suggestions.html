@@ -1,0 +1,22 @@
+{# The add form's dropdown: previous entries matching what's been typed so far.
+
+   Swapped into #suggestions by the name field itself, so it re-renders on every
+   keystroke while the rest of the form — including a half-typed note — is left
+   alone. An empty match set renders nothing at all, which is also how the box is
+   dismissed: the server answers "no hits" and there is simply no list any more.
+
+   Each row carries the whole entry in data-*, like the tiles do, because picking
+   one has to fill the note as well as the name — that's the half you came for. #}
+{% if suggestions %}
+  <ul class="suggestions" role="listbox" aria-label="Previous entries">
+    {% for i in suggestions %}
+      <li>
+        <button type="button" class="suggestion" role="option"
+                data-name="{{ i.name }}" data-note="{{ i.note }}">
+          <span class="card-title">{{ i.name }}</span>
+          {% if i.note %}<span class="card-note">{{ i.note }}</span>{% endif %}
+        </button>
+      </li>
+    {% endfor %}
+  </ul>
+{% endif %}

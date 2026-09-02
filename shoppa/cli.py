@@ -96,8 +96,11 @@ def _list(config_path: str, *, as_json: bool, show_all: bool) -> int:
 
     cfg, db = _open(config_path)
     now = int(time.time())
+    # --all means the whole history: neither cut applies, the same way the JSON
+    # API never applies them.
     limit = None if show_all else cfg.web.previous_limit
-    b = items_logic.board(db.list_items(), limit)
+    max_age = None if show_all else cfg.web.previous_max_age
+    b = items_logic.board(db.list_items(), limit, max_age, now)
 
     def row(i, anchor):
         return {

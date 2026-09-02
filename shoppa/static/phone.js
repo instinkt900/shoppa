@@ -1,6 +1,7 @@
 // Phone UI glue. Adding, ticking off and re-adding are all plain HTMX; what's
 // left to wire by hand is the long press (a gesture HTMX has no trigger for), the
-// two dialogs it opens, and the home-screen icon badge.
+// two dialogs it opens, the name field's suggestion box, and the home-screen icon
+// badge.
 (function () {
   "use strict";
 
@@ -158,6 +159,75 @@
     });
   }
 
+  // --- name suggestions -------------------------------------------------------
+
+  // The list itself is fetched and rendered by HTMX (see the name input's
+  // hx-get). What's left is what a dropdown needs beyond markup: picking a row,
+  // and every way of dismissing it.
+
+  const suggestBox = () => byId("suggestions");
+  const nameInput = () => {
+    const form = byId("add-form");
+    return form ? form.elements.name : null;
+  };
+
+  function closeSuggestions() {
+    const box = suggestBox();
+    if (box) box.innerHTML = "";
+    const input = nameInput();
+    if (input) input.setAttribute("aria-expanded", "false");
+  }
+  // The add form's hx-on clears the box along with the fields, and that attribute
+  // is evaluated in global scope.
+  window.closeSuggestions = closeSuggestions;
+
+  function initSuggestions() {
+    const box = suggestBox();
+    const input = nameInput();
+    if (!box || !input) return;
+
+    box.addEventListener("click", (e) => {
+      const hit = e.target.closest && e.target.closest(".suggestion");
+      if (!hit) return;
+      // Both fields, always. A suggestion is a whole entry, and filling the name
+      // while leaving a stale note behind would build a *third* row out of two
+      // that already exist — the exact duplicate the box exists to avoid.
+      const form = byId("add-form");
+      form.elements.name.value = hit.dataset.name || "";
+      form.elements.note.value = hit.dataset.note || "";
+      closeSuggestions();
+      // Straight to the button rather than submitting for them: a picked entry is
+      // usually right as it stands, but "Chicken / Breast. 600g" often wants its
+      // quantity nudged first, and an auto-submit would have already spent it.
+      form.elements.name.focus();
+    });
+
+    // Setting .value in JS (picking a suggestion, or the form reset after an add)
+    // fires no input event, so htmx never sees it — aria-expanded is only ever
+    // set true here, where a real render has just happened.
+    box.addEventListener("htmx:afterSwap", () =>
+      input.setAttribute("aria-expanded", box.children.length ? "true" : "false"));
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeSuggestions();
+    });
+
+    // Emptying the field closes the box here rather than waiting for the server
+    // to answer "no hits": the field is `required`, and htmx declines to fire a
+    // request from an input that fails validation — so backspacing to nothing
+    // would otherwise leave the last word's suggestions hanging over the list.
+    input.addEventListener("input", () => {
+      if (!input.value.trim()) closeSuggestions();
+    });
+
+    // Anywhere else on the page dismisses it. Not `blur`: on Android the tap that
+    // picks a row blurs the input first, and the box would be gone before the
+    // click landed on it.
+    document.addEventListener("pointerdown", (e) => {
+      if (!e.target.closest || !e.target.closest(".suggest-wrap")) closeSuggestions();
+    });
+  }
+
   // --- home-screen icon badge -------------------------------------------------
 
   // Kept in step with the board on every swap, so clearing the last item clears
@@ -171,6 +241,7 @@
   }
 
   window.addEventListener("load", initDialogs);
+  window.addEventListener("load", initSuggestions);
   window.addEventListener("load", syncBadge);
   document.body.addEventListener("htmx:afterSwap", syncBadge);
 })();

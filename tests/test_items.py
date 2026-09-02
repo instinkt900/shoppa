@@ -68,34 +68,67 @@ def test_board_splits_on_pending():
     assert [i.name for i in b["previous"]] == ["Milk"]
 
 
-def test_pending_is_newest_first():
-    # What you just typed lands at the top of the screen.
+def test_pending_is_alphabetical():
+    # You read this list hunting for a name, so the name is what orders it.
     rows = [
-        _item("Old", added=NOW - 2 * DAY, id=1),
-        _item("New", added=NOW, id=2),
-        _item("Middle", added=NOW - DAY, id=3),
+        _item("Rice", added=NOW, id=1),
+        _item("Apples", added=NOW - 2 * DAY, id=2),
+        _item("Milk", added=NOW - DAY, id=3),
     ]
-    assert [i.name for i in items.board(rows)["pending"]] == ["New", "Middle", "Old"]
+    assert [i.name for i in items.board(rows)["pending"]] == ["Apples", "Milk", "Rice"]
 
 
-def test_previous_is_most_recently_ticked_off_first():
-    # The things you buy often stay within thumb reach of the form.
+def test_pending_order_ignores_when_it_was_added():
+    # The whole point: adding something must not reshuffle what's above it.
+    rows = [_item("Apples", added=NOW - WEEK, id=1), _item("Bread", added=NOW, id=2)]
+    assert [i.name for i in items.board(rows)["pending"]] == ["Apples", "Bread"]
+
+
+def test_sorting_folds_case_and_accents_like_the_dedupe_key():
+    # Sorting on the raw string would file every capital ahead of every
+    # lower-case name, and "Éclairs" past Z.
     rows = [
-        _item("Bread", pending=False, done=NOW - WEEK, id=1),
-        _item("Milk", pending=False, done=NOW - HOUR, id=2),
-        _item("Rice", pending=False, done=NOW - DAY, id=3),
+        _item("banana", id=1),
+        _item("Apples", id=2),
+        _item("Éclairs", id=3),
+        _item("Cream", id=4),
     ]
-    assert [i.name for i in items.board(rows)["previous"]] == ["Milk", "Rice", "Bread"]
+    assert [i.name for i in items.board(rows)["pending"]] == [
+        "Apples", "banana", "Cream", "Éclairs",
+    ]
+
+
+def test_same_name_sorts_by_note():
+    # "Chicken / Breast" and "Chicken / Thighs" are two entries; they belong
+    # together, in a fixed order.
+    rows = [
+        _item("Chicken", "Thighs. 1kg", id=1),
+        _item("Chicken", "Breast. 600g", id=2),
+        _item("Chicken", "", id=3),
+    ]
+    assert [i.note for i in items.board(rows)["pending"]] == ["", "Breast. 600g", "Thighs. 1kg"]
+
+
+def test_previous_is_alphabetical_too():
+    rows = [
+        _item("Rice", pending=False, done=NOW - HOUR, id=1),
+        _item("Bread", pending=False, done=NOW - WEEK, id=2),
+        _item("Milk", pending=False, done=NOW - DAY, id=3),
+    ]
+    assert [i.name for i in items.board(rows)["previous"]] == ["Bread", "Milk", "Rice"]
 
 
 def test_previous_without_done_at_falls_back_to_created():
     # A row can only get here via the API (a PATCH that sets pending=0 directly
-    # always stamps done_at). It must still sort somewhere sane, not vanish.
+    # always stamps done_at). Display is alphabetical either way; what done_at
+    # still decides is the recency trim, so check it there — with a limit of 1 the
+    # older row is the one cut, rather than the stampless row being treated as
+    # infinitely old and cut regardless of when it was created.
     rows = [
-        _item("Ghost", pending=False, done=None, created=NOW - DAY, id=1),
-        _item("Milk", pending=False, done=NOW - HOUR, id=2),
+        _item("Ghost", pending=False, done=None, created=NOW - HOUR, id=1),
+        _item("Milk", pending=False, done=NOW - DAY, id=2),
     ]
-    assert [i.name for i in items.board(rows)["previous"]] == ["Milk", "Ghost"]
+    assert [i.name for i in items.board(rows, previous_limit=1)["previous"]] == ["Ghost"]
 
 
 def test_previous_limit_trims_only_history():
@@ -114,11 +147,132 @@ def test_previous_limit_zero_hides_history_entirely():
 
 
 def test_ties_break_on_id_not_arbitrarily():
-    # Two things added in the same second (tap a previous entry, tap another)
-    # must still come out in a stable, newest-last-inserted-first order.
-    rows = [_item("First", added=NOW, id=1), _item("Second", added=NOW, id=2)]
-    assert [i.name for i in items.board(rows)["pending"]] == ["Second", "First"]
-    assert [i.name for i in items.board(list(reversed(rows)))["pending"]] == ["Second", "First"]
+    # Two rows that sort equal (the UNIQUE index means they can't be an exact
+    # pair, but a PATCH-built oddity could be) must not come out in whatever
+    # order SQL happened to hand them over in.
+    rows = [_item("Milk", added=NOW, id=1), _item("Milk", added=NOW, id=2)]
+    assert [i.id for i in items.board(rows)["pending"]] == [1, 2]
+    assert [i.id for i in items.board(list(reversed(rows)))["pending"]] == [1, 2]
+
+
+def test_previous_limit_cuts_by_recency_then_sorts():
+    # The two questions are separate: *which* entries are still worth a screen is
+    # about time, *where* they go is about names. Cutting alphabetically would
+    # amputate the history at whatever letter the limit reached — here it would
+    # keep Apples and Bread and lose Milk, which was ticked off an hour ago.
+    rows = [
+        _item("Apples", pending=False, done=NOW - 40 * DAY, id=1),
+        _item("Milk", pending=False, done=NOW - HOUR, id=2),
+        _item("Bread", pending=False, done=NOW - 30 * DAY, id=3),
+        _item("Rice", pending=False, done=NOW - DAY, id=4),
+    ]
+    # Milk and Rice survive the cut; A-Z decides how they're then shown.
+    assert [i.name for i in items.board(rows, previous_limit=2)["previous"]] == ["Milk", "Rice"]
+
+
+def test_previous_max_age_drops_things_not_used_in_a_while():
+    # The cut that actually means "old": a thing last bought a year ago isn't a
+    # catalogue entry any more, however few entries sit above it.
+    rows = [
+        _item("Milk", pending=False, done=NOW - DAY, id=1),
+        _item("Sparklers", pending=False, done=NOW - 300 * DAY, id=2),
+    ]
+    b = items.board(rows, max_age=180 * DAY, now=NOW)
+    assert [i.name for i in b["previous"]] == ["Milk"]
+
+
+def test_previous_max_age_keeps_an_entry_right_on_the_boundary():
+    rows = [_item("Milk", pending=False, done=NOW - 180 * DAY, id=1)]
+    assert len(items.board(rows, max_age=180 * DAY, now=NOW)["previous"]) == 1
+
+
+def test_previous_max_age_never_touches_the_shopping_list():
+    # Something you put on the list is current by definition, however long it has
+    # sat there unticked.
+    rows = [_item("Milk", added=NOW - 300 * DAY, id=1)]
+    assert [i.name for i in items.board(rows, max_age=DAY, now=NOW)["pending"]] == ["Milk"]
+
+
+def test_previous_max_age_and_limit_apply_together():
+    # Age first, then the count cap on what survived it.
+    rows = [_item(f"Old{n}", pending=False, done=NOW - 300 * DAY, id=n) for n in range(5)]
+    rows += [_item(f"New{n}", pending=False, done=NOW - n * DAY, id=100 + n) for n in range(4)]
+    b = items.board(rows, previous_limit=2, max_age=180 * DAY, now=NOW)
+    assert [i.name for i in b["previous"]] == ["New0", "New1"]
+
+
+def test_no_max_age_means_no_age_cut():
+    # The default, so upgrading doesn't silently shrink an existing history.
+    rows = [_item("Sparklers", pending=False, done=NOW - 3000 * DAY, id=1)]
+    assert len(items.board(rows)["previous"]) == 1
+
+
+def test_max_age_without_now_is_an_error_not_a_silent_no_op():
+    # items.py owns no clock on purpose; an age cut it can't measure is a bug in
+    # the caller, and quietly keeping everything would hide it.
+    try:
+        items.board([], max_age=DAY)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError")
+
+
+# --- suggestions --------------------------------------------------------------
+
+
+def _previous(name, note="", id=1):
+    return _item(name, note, pending=False, done=NOW, id=id)
+
+
+def test_suggest_matches_on_name():
+    rows = [_previous("Chicken", "Breast. 600g", 1), _previous("Rice", "", 2)]
+    assert [i.name for i in items.suggest(rows, "chi")] == ["Chicken"]
+
+
+def test_suggest_returns_whole_entries_so_the_note_comes_too():
+    # The note is the half you don't remember, and the half that decides whether
+    # the entry you already have is revived or a near-duplicate is created.
+    rows = [_previous("Chicken", "Breast. 600g", 1), _previous("Chicken", "Thighs. 1kg", 2)]
+    hits = items.suggest(rows, "chicken")
+    assert [(i.name, i.note) for i in hits] == [
+        ("Chicken", "Breast. 600g"), ("Chicken", "Thighs. 1kg"),
+    ]
+
+
+def test_suggest_ignores_case_spacing_and_accents():
+    rows = [_previous("Crème fraîche", "", 1)]
+    assert items.suggest(rows, "  CREME  ")[0].name == "Crème fraîche"
+
+
+def test_suggest_prefers_prefix_matches():
+    # Typing "ap" wants Apples before Pineapple.
+    rows = [_previous("Pineapple", "", 1), _previous("Apples", "", 2)]
+    assert [i.name for i in items.suggest(rows, "ap")] == ["Apples", "Pineapple"]
+
+
+def test_suggest_is_alphabetical_within_a_rank():
+    # So the box doesn't reshuffle itself as you type another letter.
+    rows = [_previous("Beans", "", 1), _previous("Bread", "", 2), _previous("Bacon", "", 3)]
+    assert [i.name for i in items.suggest(rows, "b")] == ["Bacon", "Beans", "Bread"]
+
+
+def test_suggest_skips_things_already_on_the_list():
+    # It's already a tile on the screen; offering it as something to add is noise.
+    rows = [_item("Milk", pending=True, id=1), _previous("Milk", "2L", 2)]
+    assert [i.note for i in items.suggest(rows, "milk")] == ["2L"]
+
+
+def test_suggest_on_empty_query_offers_nothing():
+    # An empty field means the box isn't open, not that the whole history is.
+    rows = [_previous("Milk", "", 1)]
+    assert items.suggest(rows, "") == []
+    assert items.suggest(rows, "   ") == []
+
+
+def test_suggest_honours_its_limit():
+    rows = [_previous(f"Bread {n}", "", n) for n in range(20)]
+    assert len(items.suggest(rows, "bread", limit=3)) == 3
 
 
 # --- age phrasing -------------------------------------------------------------
