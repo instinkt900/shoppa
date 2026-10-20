@@ -22,11 +22,11 @@ WEEK = 604_800
 NOW = 1_800_000_000
 
 
-def _item(name, note="", *, pending=True, added=NOW, done=None, id=1, created=None):
+def _item(name, note="", *, pending=True, added=NOW, done=None, id=1, created=None, times=1):
     return Item(
         name=name, note=note, pending=pending,
         created_at=created if created is not None else added,
-        added_at=added, done_at=done, id=id,
+        added_at=added, done_at=done, times_added=times, id=id,
     )
 
 
@@ -168,6 +168,29 @@ def test_previous_limit_cuts_by_recency_then_sorts():
     ]
     # Milk and Rice survive the cut; A-Z decides how they're then shown.
     assert [i.name for i in items.board(rows, previous_limit=2)["previous"]] == ["Milk", "Rice"]
+
+
+def test_previous_limit_keeps_the_most_used_before_the_most_recent():
+    # The regulars are the point of the list: Bread, bought every week but
+    # skipped this week, must outrank a one-off ticked off an hour ago. One-offs
+    # only fill what's left, most recent first.
+    rows = [
+        _item("Bread", pending=False, done=NOW - 30 * DAY, times=12, id=1),
+        _item("Candles", pending=False, done=NOW - HOUR, id=2),
+        _item("Milk", pending=False, done=NOW - 40 * DAY, times=3, id=3),
+        _item("Glue", pending=False, done=NOW - DAY, id=4),
+        _item("Tape", pending=False, done=NOW - 2 * DAY, id=5),
+    ]
+    assert [i.name for i in items.board(rows, previous_limit=3)["previous"]] == ["Bread", "Candles", "Milk"]
+    assert [i.name for i in items.board(rows, previous_limit=4)["previous"]] == ["Bread", "Candles", "Glue", "Milk"]
+
+
+def test_previous_limit_ranks_by_count_not_just_more_than_once():
+    rows = [
+        _item("Eggs", pending=False, done=NOW - HOUR, times=2, id=1),
+        _item("Milk", pending=False, done=NOW - 9 * DAY, times=20, id=2),
+    ]
+    assert [i.name for i in items.board(rows, previous_limit=1)["previous"]] == ["Milk"]
 
 
 def test_previous_max_age_drops_things_not_used_in_a_while():

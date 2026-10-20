@@ -64,16 +64,19 @@ def board(
     last tie so the order is total and never depends on the row order SQL happens
     to return.
 
-    Two cuts trim the history before any of that, and **both are about time, not
-    about names** — sorting decides where an entry sits, never whether it's shown.
-    Trimming the alphabet instead would silently amputate the history past
-    whatever letter the limit reached.
+    Two cuts trim the history before any of that, and **neither is about names**
+    — sorting decides where an entry sits, never whether it's shown. Trimming the
+    alphabet instead would silently amputate the history past whatever letter
+    the limit reached.
 
     - `max_age` (seconds; needs `now`) drops entries not used in that long. This
       is the honest one: a thing you last bought two years ago isn't a catalogue
       entry any more, however few entries happen to sit above it.
-    - `previous_limit` then caps what's left to the N most recently used, so a
-      screen can't be buried whatever the age cutoff is set to.
+    - `previous_limit` then caps what's left to the N most *used*: the most
+      often added first, and recency among equals. The regulars are what the
+      list is for, and they're the ones a recency cut drops the week you skip
+      them; a one-off you bought once stays only while it's recent enough to fill
+      a slot the regulars leave free.
 
     Either can be None for "no cut". Both only hide rows — nothing here deletes
     anything, and `GET /api/items` still returns the lot.
@@ -90,12 +93,13 @@ def board(
     pending = sorted((i for i in items if i.pending), key=_alpha_key)
     previous = sorted(
         (i for i in items if not i.pending),
+        # Most often added first, then most recently used among equals.
         # `done_at` is when a row left the pending list, i.e. when it was last
-        # actually used — which is what both cuts and the recency sort mean by
-        # "old". It's only None for rows that got here some other way (a direct
-        # API PATCH, say); fall back to created_at rather than dropping them.
-        # `id` breaks a tie so the count trim keeps the same rows every time.
-        key=lambda i: (_last_used(i), i.id or 0),
+        # actually used — which is what the age cut and the recency tie-break
+        # mean by "old". It's only None for rows that got here some other way (a
+        # direct API PATCH, say); fall back to created_at rather than dropping
+        # them. `id` breaks a tie so the count trim keeps the same rows every time.
+        key=lambda i: (i.times_added, _last_used(i), i.id or 0),
         reverse=True,
     )
     if max_age is not None:

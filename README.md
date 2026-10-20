@@ -71,7 +71,7 @@ for a name — "is bread on here?" in the aisle — and only a fixed order lets 
 find one without reading every tile; a recency order reshuffles itself under your
 thumb on every tap.
 
-The history is **cut by time** before it's sorted, never by letter — trimming the
+The history is **cut by use** before it's sorted, never by letter — trimming the
 alphabet would silently amputate it at whatever letter the limit reached. Two
 settings do the cutting, and both only hide rows:
 
@@ -79,8 +79,9 @@ settings do the cutting, and both only hide rows:
   This is the one that means "old": a thing last bought two years ago isn't a
   catalogue entry any more, however few entries sit above it. `0` (the default)
   turns it off.
-- `[web] previous_limit` then caps what's left to the N most recently used, so a
-  screen can't be buried whatever the age cutoff is.
+- `[web] previous_limit` (default 10) then keeps the N entries you add most
+  often. When fewer than N have been added more than once, the most recently
+  used fill the rest.
 
 Nothing is deleted by either. `GET /api/items`, `shoppa list --all` and the add
 form's name suggestions all still see the whole history — only the long-press

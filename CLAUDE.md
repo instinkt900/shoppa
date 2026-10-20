@@ -71,10 +71,11 @@ config.example.toml   the only tracked config; real config.toml is gitignored
   the normalised note, then `id` — so display order agrees with the dedupe key and
   is total. Alphabetical because both lists are read by *hunting* for a name; a
   recency order reshuffles under the thumb on every tap. The history's two cuts
-  are both about **time** and both run *before* the sort — `previous_max_age`
+  are about **use**, not names, and both run *before* the sort — `previous_max_age`
   (seconds; drops entries whose `_last_used` is older, and `board` raises if it's
-  given without `now`, since items.py owns no clock) then `previous_limit` (caps
-  what survived to the N most recently used). Sorting decides where a row sits,
+  given without `now`, since items.py owns no clock) then `previous_limit` (default
+  10; keeps the N with the highest `times_added`, most recently used first among
+  equals — so one-offs only fill slots the regulars leave free). Sorting decides where a row sits,
   never whether it's shown; cutting the alphabet would amputate the history past
   whatever letter the limit reached. Both only hide rows — nothing there deletes.
   The shopping list is never trimmed by either.

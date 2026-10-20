@@ -35,9 +35,10 @@ class WebConfig:
     # Display only — nothing in Shoppa is scheduled, so this just decides how
     # "2 days ago" and the dates in the JSON API read.
     timezone: str = "UTC"
-    # How many previous entries the phone shows. Older ones stay in the database
-    # and in `GET /api/items`; they're only cut from the screen.
-    previous_limit: int = 40
+    # How many previous entries the phone shows: the most often added, then the
+    # most recent. The rest stay in the database, in `GET /api/items` and in the
+    # add form's suggestions; they're only cut from the screen.
+    previous_limit: int = 10
     # Drop previous entries not used in this many days. 0 = no age cut, which is
     # the default so an existing install's history doesn't shrink on upgrade.
     # This is the cut that actually means "old"; `previous_limit` is only a cap on

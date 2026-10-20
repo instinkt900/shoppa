@@ -12,11 +12,12 @@ port = 8080
 # decides how "added 2 days ago" and the dates in the JSON API read.
 timezone = "UTC"
 # How many previous entries to show under the add form. The list is the shopping
-# history acting as a catalogue to tap from, so the *cut* is by recency —
-# everything older is still in the database, still in `GET /api/items`, and still
+# history acting as a catalogue to tap from, so the *cut* keeps what you add most
+# often, then the most recently used — everything else is still in the database,
+# still in `GET /api/items`, and still
 # offered by the add form's name suggestions, just not on the phone screen. What
 # survives the cut is then shown A-Z, like the shopping list itself.
-previous_limit = 40
+previous_limit = 10
 # Hide previous entries not used in this many days — the cut that actually means
 # "old", where previous_limit is only a cap on how much of what's left can bury a
 # screen. 0 turns it off, which is the default. Nothing is deleted either way:
